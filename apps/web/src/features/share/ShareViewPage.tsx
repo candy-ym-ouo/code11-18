@@ -115,6 +115,9 @@ export function ShareViewPage() {
           <div>
             <h1>{view.label || '家人分享给你的记录'}</h1>
             <p className="page-head__sub">共 {view.items.length} 条，链接有效期至 {new Date(view.expiresAt).toLocaleDateString('zh-CN')}</p>
+            <p className="wm-provenance-note">
+              本页图片带有「{view.familyName}」出处水印与隐形可验编号，下载或转发的图片可被追溯回本次分享，请尊重分享者的信任。
+            </p>
           </div>
         </div>
 
@@ -122,29 +125,55 @@ export function ShareViewPage() {
           <EmptyState title="没有可查看的内容" description="可能分享已经被撤销或内容已删除。" />
         ) : (
           <div className="stack">
-            {view.items.map((item) => (
-              <article key={item.id} className="card">
-                <div className="row" style={{ gap: 'var(--space-2)', marginBottom: 6 }}>
-                  <Tag>
-                    {CATEGORY_ICONS[item.category]} {CATEGORY_LABELS[item.category]}
-                  </Tag>
-                  <Tag tone="muted">{item.acquiredDisplay}</Tag>
-                </div>
-                <h2 style={{ marginBottom: 'var(--space-2)' }}>{item.title}</h2>
-                {item.placeText ? <p className="muted">{item.placeText}</p> : null}
-                {item.storyHtml ? (
-                  <div className="story" dangerouslySetInnerHTML={{ __html: item.storyHtml }} />
-                ) : null}
-                <ImageGallery media={item.media.filter((m) => m.kind === 'image')} />
-                {item.media
-                  .filter((m) => m.kind === 'audio')
-                  .map((m) => (
-                    <div key={m.id} style={{ marginTop: 'var(--space-3)' }}>
-                      <AudioPlayer media={{ ...m, rawUrl: `/api/v1/public/share/${token}/media/${m.id}/download` }} />
-                    </div>
-                  ))}
-              </article>
-            ))}
+            {view.items.map((item) => {
+              // 公开页的媒体必须走 /public 通道（带水印副本），覆盖 DTO 默认的鉴权地址
+              const publicMedia = item.media.map((m) =>
+                m.kind === 'image'
+                  ? {
+                      ...m,
+                      thumbUrl: `/api/v1/public/share/${token}/media/${m.id}/thumb`,
+                      rawUrl: `/api/v1/public/share/${token}/media/${m.id}/raw`,
+                    }
+                  : m,
+              );
+              return (
+                <article key={item.id} className="card">
+                  <div className="row" style={{ gap: 'var(--space-2)', marginBottom: 6 }}>
+                    <Tag>
+                      {CATEGORY_ICONS[item.category]} {CATEGORY_LABELS[item.category]}
+                    </Tag>
+                    <Tag tone="muted">{item.acquiredDisplay}</Tag>
+                  </div>
+                  <h2 style={{ marginBottom: 'var(--space-2)' }}>{item.title}</h2>
+                  {item.placeText ? <p className="muted">{item.placeText}</p> : null}
+                  {item.storyHtml ? (
+                    <div className="story" dangerouslySetInnerHTML={{ __html: item.storyHtml }} />
+                  ) : null}
+                  <ImageGallery media={publicMedia.filter((m) => m.kind === 'image')} />
+                  {publicMedia
+                    .filter((m) => m.kind === 'audio')
+                    .map((m) => (
+                      <div key={m.id} style={{ marginTop: 'var(--space-3)' }}>
+                        <AudioPlayer media={{ ...m, rawUrl: `/api/v1/public/share/${token}/media/${m.id}/download` }} />
+                      </div>
+                    ))}
+                  {publicMedia
+                    .filter((m) => m.kind === 'document')
+                    .map((m) => (
+                      <div key={m.id} style={{ marginTop: 'var(--space-2)' }}>
+                        <a
+                          className="btn btn--sm"
+                          href={`/api/v1/public/share/${token}/media/${m.id}/download`}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          下载 {m.originalName}
+                        </a>
+                      </div>
+                    ))}
+                </article>
+              );
+            })}
           </div>
         )}
       </main>

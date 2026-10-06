@@ -8,6 +8,7 @@ declare global {
       user?: User;
       familyCtx?: FamilyContext;
       familyRole?: FamilyRole;
+      visitorId?: string;
     }
   }
 }

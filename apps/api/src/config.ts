@@ -36,6 +36,8 @@ const envSchema = z.object({
   DATABASE_URL: z.string().min(1, '必须提供 DATABASE_URL'),
 
   JWT_SECRET: z.string().min(32, 'JWT_SECRET 至少 32 位，请用 openssl rand -hex 32 生成'),
+  /** 水印短码签名密钥；留空时回落 JWT_SECRET（单实例够用，多实例建议显式指定且不要轮换） */
+  WATERMARK_HMAC_KEY: z.string().min(16).optional(),
   ACCESS_TOKEN_TTL: z.string().default('15m'),
   REFRESH_TOKEN_TTL: z.string().default('14d'),
   COOKIE_SECURE: boolish(false),

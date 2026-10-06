@@ -166,6 +166,56 @@ export interface ShareLink {
   token?: string;
 }
 
+export interface WatermarkCopy {
+  id: string;
+  code: string;
+  mediaId: string;
+  variant: 'full' | 'thumb';
+  visitorId: string;
+  byteSize: number;
+  width: number;
+  height: number;
+  firstSeenAt: string;
+  lastUsedAt: string;
+  downloadCount: number;
+}
+
+export interface ShareTrace {
+  linkId: string;
+  revokedAt: string | null;
+  copies: WatermarkCopy[];
+  eventCount: number;
+}
+
+export interface ShareTraceEvent {
+  id: string;
+  context: 'inline' | 'download';
+  mediaId: string | null;
+  visitorId: string;
+  ip: string | null;
+  userAgent: string | null;
+  createdAt: string;
+  copyCode: string | null;
+}
+
+export interface WatermarkVerifyResult {
+  watermarked: boolean;
+  code?: string;
+  validSignature?: boolean;
+  shareLink?: {
+    id: string;
+    label: string | null;
+    revoked: boolean;
+    createdAt: string;
+    expiresAt: string;
+    revokedAt: string | null;
+  };
+  media?: { id: string; itemId: string; originalName: string };
+  copy?: { variant: string; firstSeenAt: string; lastUsedAt: string };
+  visitorId?: string;
+  eventCount?: number;
+}
+
 export interface AuditLog {
   id: string;
   action: string;

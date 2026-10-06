@@ -104,7 +104,7 @@ async function loadLink(token: string) {
   return link;
 }
 
-export async function viewShareLink(token: string, password?: string): Promise<PublicShareView> {
+export async function viewShareLink(token: string, password?: string, visitor?: { id: string; meta: ActorMeta }): Promise<PublicShareView> {
   const link = await loadLink(token);
 
   if (link.passwordHash) {
@@ -125,10 +125,27 @@ export async function viewShareLink(token: string, password?: string): Promise<P
     orderBy: { sortAt: 'desc' },
   });
 
-  await prisma.shareLink.update({
-    where: { id: link.id },
-    data: { accessCount: { increment: 1 }, lastAccessAt: new Date() },
-  });
+  await prisma.$transaction([
+    prisma.shareLink.update({
+      where: { id: link.id },
+      data: { accessCount: { increment: 1 }, lastAccessAt: new Date() },
+    }),
+    ...(visitor
+      ? [
+          prisma.shareAccessEvent.create({
+            data: {
+              shareLinkId: link.id,
+              visitorId: visitor.id,
+              mediaId: null,
+              copyId: null,
+              context: 'inline',
+              ip: visitor.meta.ip ?? null,
+              userAgent: visitor.meta.userAgent ?? null,
+            },
+          }),
+        ]
+      : []),
+  ]);
 
   return {
     familyName: link.family.name,
@@ -147,5 +164,28 @@ export async function assertPublicMedia(token: string, mediaId: string) {
   });
   if (!media) throw notFound('媒体不存在');
   return media;
+}
+
+/** 非图片对外文件（音频 / PDF）无法嵌像素水印，也要留下访问与下载留痕。 */
+export async function recordPublicFileAccess(
+  token: string,
+  mediaId: string,
+  visitor: { id: string; meta: ActorMeta },
+  context: 'inline' | 'download',
+): Promise<void> {
+  const link = await loadLink(token);
+  await prisma.shareAccessEvent
+    .create({
+      data: {
+        shareLinkId: link.id,
+        visitorId: visitor.id,
+        mediaId,
+        copyId: null,
+        context,
+        ip: visitor.meta.ip ?? null,
+        userAgent: visitor.meta.userAgent ?? null,
+      },
+    })
+    .catch(() => undefined);
 }
 

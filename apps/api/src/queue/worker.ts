@@ -116,6 +116,9 @@ async function handleStorageGc(): Promise<Record<string, unknown>> {
   for (const m of media) {
     for (const k of [m.storageKey, m.thumbKey, m.largeKey, m.transcodeKey, m.waveformKey]) if (k) referenced.add(k);
   }
+  // 水印副本即使在分享撤销后也必须保留（事后追溯依据），不能当孤儿清掉
+  const copies = await prisma.watermarkCopy.findMany({ select: { storageKey: true } });
+  for (const c of copies) referenced.add(c.storageKey);
 
   const root = config.STORAGE_ROOT;
   let scanned = 0;

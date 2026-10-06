@@ -8,6 +8,8 @@ import { useAuth } from '../auth/AuthContext';
 import { useFamily } from '../families/useFamily';
 import { VISIBILITY_LABELS } from '../../lib/constants';
 import { formatBytes, formatDateTime } from '../../lib/format';
+import { ShareTraceDialog } from '../watermark/ShareTraceDialog';
+import { WatermarkVerifyPanel } from '../watermark/WatermarkVerifyPanel';
 import type { ShareLink, Visibility } from '../../api/types';
 
 interface ExportJob {
@@ -33,6 +35,7 @@ export function SettingsPage() {
   const [allowViewerComment, setAllowViewerComment] = useState(false);
   const [confirmName, setConfirmName] = useState('');
   const [jobId, setJobId] = useState<string | null>(null);
+  const [traceLink, setTraceLink] = useState<ShareLink | null>(null);
 
   useEffect(() => {
     if (!familyData) return;
@@ -199,16 +202,26 @@ export function SettingsPage() {
                       {link.lastAccessAt ? ` · 最近 ${formatDateTime(link.lastAccessAt)}` : ''}
                     </div>
                   </div>
-                  {active ? (
-                    <Button size="sm" onClick={() => revoke.mutate(link.id)}>
-                      撤销
+                  <div className="row" style={{ gap: 'var(--space-2)' }}>
+                    <Button size="sm" onClick={() => setTraceLink(link)}>
+                      分发追溯
                     </Button>
-                  ) : null}
+                    {active ? (
+                      <Button size="sm" onClick={() => revoke.mutate(link.id)}>
+                        撤销
+                      </Button>
+                    ) : null}
+                  </div>
                 </div>
               );
             })}
           </div>
         )}
+      </section>
+
+      <section className="card">
+        <h2 style={{ marginBottom: 'var(--space-3)' }}>图片水印与出处鉴别</h2>
+        <WatermarkVerifyPanel fid={fid!} />
       </section>
 
       <section className="card">
@@ -242,6 +255,16 @@ export function SettingsPage() {
             删除整个家庭空间
           </Button>
         </section>
+      ) : null}
+
+      {traceLink ? (
+        <ShareTraceDialog
+          open
+          fid={fid!}
+          linkId={traceLink.id}
+          linkLabel={traceLink.label || '未命名分享'}
+          onClose={() => setTraceLink(null)}
+        />
       ) : null}
     </div>
   );

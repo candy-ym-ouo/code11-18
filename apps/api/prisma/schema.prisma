@@ -107,6 +107,16 @@ enum JobStatus {
   failed
 }
 
+enum WatermarkVariant {
+  full
+  thumb
+}
+
+enum WatermarkContext {
+  inline
+  download
+}
+
 model User {
   id           String        @id @default(cuid())
   email        String        @unique
@@ -129,15 +139,15 @@ model User {
 }
 
 model Family {
-  id                   String     @id @default(cuid())
-  name                 String
-  description          String?
-  defaultVisibility    Visibility @default(family) @map("default_visibility")
-  allowViewerComment   Boolean    @default(false) @map("allow_viewer_comment")
-  createdBy            String     @map("created_by")
-  createdAt            DateTime   @default(now()) @map("created_at")
-  updatedAt            DateTime   @updatedAt @map("updated_at")
-  deletedAt            DateTime?  @map("deleted_at")
+  id                 String     @id @default(cuid())
+  name               String
+  description        String?
+  defaultVisibility  Visibility @default(family) @map("default_visibility")
+  allowViewerComment Boolean    @default(false) @map("allow_viewer_comment")
+  createdBy          String     @map("created_by")
+  createdAt          DateTime   @default(now()) @map("created_at")
+  updatedAt          DateTime   @updatedAt @map("updated_at")
+  deletedAt          DateTime?  @map("deleted_at")
 
   members    FamilyMember[]
   invites    Invite[]
@@ -167,17 +177,17 @@ model FamilyMember {
 }
 
 model Invite {
-  id        String    @id @default(cuid())
-  familyId  String    @map("family_id")
-  codeHash  String    @unique @map("code_hash")
+  id        String     @id @default(cuid())
+  familyId  String     @map("family_id")
+  codeHash  String     @unique @map("code_hash")
   role      FamilyRole
   note      String?
-  expiresAt DateTime  @map("expires_at")
-  maxUses   Int       @default(1) @map("max_uses")
-  usedCount Int       @default(0) @map("used_count")
-  createdBy String    @map("created_by")
-  createdAt DateTime  @default(now()) @map("created_at")
-  revokedAt DateTime? @map("revoked_at")
+  expiresAt DateTime   @map("expires_at")
+  maxUses   Int        @default(1) @map("max_uses")
+  usedCount Int        @default(0) @map("used_count")
+  createdBy String     @map("created_by")
+  createdAt DateTime   @default(now()) @map("created_at")
+  revokedAt DateTime?  @map("revoked_at")
 
   family Family @relation(fields: [familyId], references: [id], onDelete: Cascade)
 
@@ -236,13 +246,13 @@ model Item {
   updatedAt         DateTime   @updatedAt @map("updated_at")
   deletedAt         DateTime?  @map("deleted_at")
 
-  family  Family       @relation(fields: [familyId], references: [id], onDelete: Cascade)
-  creator User         @relation(fields: [createdBy], references: [id])
-  people  ItemPerson[]
-  media   ItemMedia[]
-  notes   ItemNote[]
-  shares  ItemShare[]
-  versions ItemVersion[]
+  family     Family          @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  creator    User            @relation(fields: [createdBy], references: [id])
+  people     ItemPerson[]
+  media      ItemMedia[]
+  notes      ItemNote[]
+  shares     ItemShare[]
+  versions   ItemVersion[]
   shareLinks ShareLinkItem[]
 
   @@index([familyId, status, category])
@@ -266,31 +276,32 @@ model ItemPerson {
 }
 
 model ItemMedia {
-  id          String      @id @default(cuid())
-  itemId      String      @map("item_id")
-  kind        MediaKind
-  status      MediaStatus @default(processing)
-  storageKey  String      @map("storage_key")
-  sha256      String
-  mimeType    String      @map("mime_type")
-  byteSize    BigInt      @map("byte_size")
-  width       Int?
-  height      Int?
-  durationMs  Int?        @map("duration_ms")
-  thumbKey    String?     @map("thumb_key")
-  largeKey    String?     @map("large_key")
-  transcodeKey String?    @map("transcode_key")
-  waveformKey String?     @map("waveform_key")
-  originalName String     @map("original_name")
-  caption     String?
-  transcript  String?
-  sortOrder   Int         @default(0) @map("sort_order")
-  lastError   String?     @map("last_error")
-  createdBy   String      @map("created_by")
-  createdAt   DateTime    @default(now()) @map("created_at")
-  deletedAt   DateTime?   @map("deleted_at")
+  id           String      @id @default(cuid())
+  itemId       String      @map("item_id")
+  kind         MediaKind
+  status       MediaStatus @default(processing)
+  storageKey   String      @map("storage_key")
+  sha256       String
+  mimeType     String      @map("mime_type")
+  byteSize     BigInt      @map("byte_size")
+  width        Int?
+  height       Int?
+  durationMs   Int?        @map("duration_ms")
+  thumbKey     String?     @map("thumb_key")
+  largeKey     String?     @map("large_key")
+  transcodeKey String?     @map("transcode_key")
+  waveformKey  String?     @map("waveform_key")
+  originalName String      @map("original_name")
+  caption      String?
+  transcript   String?
+  sortOrder    Int         @default(0) @map("sort_order")
+  lastError    String?     @map("last_error")
+  createdBy    String      @map("created_by")
+  createdAt    DateTime    @default(now()) @map("created_at")
+  deletedAt    DateTime?   @map("deleted_at")
 
-  item Item @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  item       Item            @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  watermarks WatermarkCopy[]
 
   @@index([itemId, sortOrder])
   @@index([sha256])
@@ -358,8 +369,10 @@ model ShareLink {
   createdBy    String    @map("created_by")
   createdAt    DateTime  @default(now()) @map("created_at")
 
-  family Family          @relation(fields: [familyId], references: [id], onDelete: Cascade)
-  items  ShareLinkItem[]
+  family       Family             @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  items        ShareLinkItem[]
+  watermarks   WatermarkCopy[]
+  accessEvents ShareAccessEvent[]
 
   @@index([familyId, createdAt])
   @@map("share_links")
@@ -374,6 +387,55 @@ model ShareLinkItem {
 
   @@id([shareLinkId, itemId])
   @@map("share_link_items")
+}
+
+/// 已分发的带水印图片副本：每个「分享链接 × 访客 × 媒体 × 尺寸」一份。
+/// 撤销分享只置 revokedAt，记录与副本键名都保留——这正是事后追溯外泄来源的依据。
+model WatermarkCopy {
+  id          String           @id @default(cuid())
+  shareLinkId String           @map("share_link_id")
+  mediaId     String           @map("media_id")
+  visitorId   String           @map("visitor_id")
+  variant     WatermarkVariant
+  /// 对外可见、可人工辨认的副本短码（如 HL7Q2X9F4D），同时出现在可见水印与隐形载荷里
+  code        String           @unique
+  storageKey  String           @unique @map("storage_key")
+  byteSize    BigInt           @map("byte_size")
+  width       Int
+  height      Int
+  /// 隐形载荷 HMAC 签名，验图时重算比对，防止短码被伪造
+  sig         String
+  firstSeenAt DateTime         @default(now()) @map("first_seen_at")
+  lastUsedAt  DateTime         @default(now()) @map("last_used_at")
+
+  shareLink ShareLink          @relation(fields: [shareLinkId], references: [id], onDelete: Cascade)
+  media     ItemMedia          @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+  events    ShareAccessEvent[]
+
+  @@unique([shareLinkId, visitorId, mediaId, variant])
+  @@index([shareLinkId, mediaId])
+  @@map("watermark_copies")
+}
+
+/// 对外访问与下载留痕：谁（访客 cookie）、通过哪条链接、看了/下了哪张副本、从哪个 IP。
+model ShareAccessEvent {
+  id          String           @id @default(cuid())
+  shareLinkId String           @map("share_link_id")
+  visitorId   String           @map("visitor_id")
+  mediaId     String?          @map("media_id")
+  copyId      String?          @map("copy_id")
+  context     WatermarkContext
+  ip          String?
+  userAgent   String?          @map("user_agent")
+  createdAt   DateTime         @default(now()) @map("created_at")
+
+  shareLink ShareLink      @relation(fields: [shareLinkId], references: [id], onDelete: Cascade)
+  copy      WatermarkCopy? @relation(fields: [copyId], references: [id], onDelete: SetNull)
+
+  @@index([shareLinkId, createdAt])
+  @@index([copyId])
+  @@index([visitorId, createdAt])
+  @@map("share_access_events")
 }
 
 model AuditLog {

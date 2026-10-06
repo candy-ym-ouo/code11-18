@@ -1125,3 +1125,51 @@
   }
 }
 
+
+/* ---------- 分享水印与追溯 ---------- */
+.link-btn {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: var(--accent);
+  cursor: pointer;
+}
+.link-btn:hover {
+  text-decoration: underline;
+}
+
+.notice {
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 10px);
+  padding: var(--space-3) var(--space-4);
+  font-size: 14px;
+}
+.notice--muted {
+  background: var(--surface-2);
+  border-color: var(--border);
+}
+.notice--warn {
+  background: var(--warn-soft);
+  border-color: var(--warn);
+  color: var(--warn);
+}
+.notice--success {
+  background: var(--success-soft);
+  border-color: var(--success);
+}
+.notice--success code,
+.notice--success strong {
+  color: var(--success);
+}
+.trace-list {
+  margin: var(--space-2) 0 0;
+  padding-left: var(--space-4);
+  display: grid;
+  gap: 4px;
+}
+.wm-provenance-note {
+  font-size: 13px;
+  color: var(--muted, #777);
+  margin: var(--space-2) 0 0;
+}

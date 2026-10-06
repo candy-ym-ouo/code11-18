@@ -89,6 +89,9 @@ export function ShareDialog({
       ) : (
         <>
           <p className="muted">将分享选中的 {itemIds.length} 条记录。</p>
+          <div className="notice notice--muted" style={{ marginBottom: 'var(--space-3)' }}>
+            对外图片会自动加上家庭出处水印和隐形可验编号，每次查看、下载都会留痕；撤销分享后，已分发的副本仍可凭编号追溯。可在「家庭设置 → 分发追溯」里查看。
+          </div>
           <Field label="有效期">
             <TextInput
               type="number"

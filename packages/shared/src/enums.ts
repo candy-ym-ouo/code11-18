@@ -121,6 +121,7 @@ export const AUDIT_ACTIONS = [
   'note.reject',
   'share.create',
   'share.revoke',
+  'share.watermark_verify',
   'export.create',
   'export.download',
   'access.denied',

@@ -7,6 +7,8 @@ interface SendOptions {
   mimeType: string;
   filename: string;
   download?: boolean;
+  /** 公开水印图必须 no-store：同一代理缓存绝不能把 A 的水印副本发给 B */
+  noStore?: boolean;
 }
 
 /**
@@ -14,13 +16,13 @@ interface SendOptions {
  * 只允许单段 range，多段（multipart/byteranges）回退为整文件，够用且实现简单。
  */
 export function sendStoredFile(req: Request, res: Response, opts: SendOptions): void {
-  const { key, size, mimeType, filename, download } = opts;
+  const { key, size, mimeType, filename, download, noStore } = opts;
   const disposition = `${download ? 'attachment' : 'inline'}; filename*=UTF-8''${encodeURIComponent(filename)}`;
 
   res.setHeader('Accept-Ranges', 'bytes');
   res.setHeader('Content-Type', mimeType);
   res.setHeader('Content-Disposition', disposition);
-  res.setHeader('Cache-Control', 'private, max-age=3600');
+  res.setHeader('Cache-Control', noStore ? 'no-store' : 'private, max-age=3600');
 
   const range = req.header('range');
   if (range) {
