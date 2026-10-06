@@ -139,8 +139,15 @@ done
 step "5/10 上传图片与音频"
 node -e '
 const fs=require("fs");
-const png=Buffer.from("iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAHElEQVQ4jWNgYGD4z4AEGAOxGkVg1CgCowYAAJ8kE/0kZ0QpAAAAAElFTkSuQmCC","base64");
-fs.writeFileSync(process.argv[1],png);
+// 256x256 带图形的真实 PNG（用项目自带的 sharp 生成）：足够大，对外分享时能容纳 LSB 盲水印
+const sharp=require("./apps/api/node_modules/sharp");
+const cells=Array.from({length:16*16},(_,i)=>{
+  const x=(i%16)*16,y=Math.floor(i/16)*16;
+  const c=["#2f4858","#8a5a44","#6b8f71","#e8e0d2"][(x/16+y/16+(i%3))%4|0];
+  return `<rect x="${x}" y="${y}" width="16" height="16" fill="${c}"/>`;
+}).join("");
+const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256"><rect width="100%" height="100%" fill="#e8e0d2"/>${cells}<circle cx="128" cy="128" r="70" fill="#a47551" opacity="0.8"/></svg>`;
+sharp(Buffer.from(svg)).png().toBuffer().then((png)=>fs.writeFileSync(process.argv[1],png));
 const sampleRate=8000,n=8000,buf=Buffer.alloc(44+n*2);
 buf.write("RIFF",0);buf.writeUInt32LE(36+n*2,4);buf.write("WAVE",8);
 buf.write("fmt ",12);buf.writeUInt32LE(16,16);buf.writeUInt16LE(1,20);buf.writeUInt16LE(1,22);
@@ -248,24 +255,90 @@ if [ "$GROUPS" -ge 1 ]; then ok "时间轴返回 $GROUPS 个时段分组"; else 
 
 code=$(req GET "$V1/families/$FID/stats" "$JAR_A" "" "$TOKEN_A"); expect "$code" 200 "家庭统计"
 
-# ---------- 9. 分享链接 ----------
-step "9/10 对外分享链接"
-code=$(req POST "$V1/families/$FID/share-links" "$JAR_A" "{\"itemIds\":[\"$IID\"],\"expiresInDays\":7,\"password\":\"zhangjia\",\"label\":\"给二叔看看\"}" "$TOKEN_A")
-expect "$code" 201 "创建带密码的分享链接"
+# ---------- 9. 分享链接（含出处水印与溯源） ----------
+step "9/10 对外分享链接 + 水印溯源"
+JAR_V="$WORK/visitor.cookies"
+code=$(req POST "$V1/families/$FID/share-links" "$JAR_A" "{\"itemIds\":[\"$IID\"],\"expiresInDays\":7,\"password\":\"zhangjia\",\"label\":\"给二叔看看\",\"watermarkMode\":\"visible+lsb\"}" "$TOKEN_A")
+expect "$code" 201 "创建带密码与水印的分享链接"
 SHARE_TOKEN=$(json 'd.shareLink.token' < "$WORK/body")
+# 链接 id 不在创建响应里，从管理端列表取
+code=$(req GET "$V1/families/$FID/share-links" "$JAR_A" "" "$TOKEN_A")
+LINK_ID=$(json 'd.shareLinks.find(l=>l.label==="给二叔看看").id' < "$WORK/body")
+WM_MODE=$(json 'd.shareLinks.find(l=>l.label==="给二叔看看").watermarkMode' < "$WORK/body")
+[ "$WM_MODE" = "visible+lsb" ] && ok "分享记录了水印模式 visible+lsb" || bad "水印模式异常：$WM_MODE"
 
-code=$(curl -sS -o "$WORK/body" -w '%{http_code}' -X POST -H 'Content-Type: application/json' --data '{}' "$V1/public/share/$SHARE_TOKEN")
+code=$(curl -sS -o "$WORK/body" -w '%{http_code}' -X POST -b "$JAR_V" -c "$JAR_V" -H 'Content-Type: application/json' --data '{}' "$V1/public/share/$SHARE_TOKEN")
 expect "$code" 200 "匿名访问返回「需要密码」"
 NEEDS_PW=$(json 'd.share.requiresPassword' < "$WORK/body")
 if [ "$NEEDS_PW" = "true" ]; then ok "未提供密码时不泄露内容"; else bad "未提供密码却吐出了内容"; fi
 
-code=$(curl -sS -o "$WORK/body" -w '%{http_code}' -X POST -H 'Content-Type: application/json' --data '{"password":"zhangjia"}' "$V1/public/share/$SHARE_TOKEN")
+code=$(curl -sS -o "$WORK/body" -w '%{http_code}' -X POST -b "$JAR_V" -c "$JAR_V" -H 'Content-Type: application/json' --data '{"password":"zhangjia"}' "$V1/public/share/$SHARE_TOKEN")
 expect "$code" 200 "密码正确后可见"
 SHARED_ITEMS=$(json 'd.share.items.length' < "$WORK/body")
 if [ "$SHARED_ITEMS" = "1" ]; then ok "访客只看到被分享的 1 条"; else bad "访客看到 $SHARED_ITEMS 条（应为 1）"; fi
+grep -q "hl_share_v" "$JAR_V" && ok "访客被分配了签名身份 Cookie（hl_share_v）" || bad "未下发访客 Cookie"
 
 code=$(curl -sS -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' --data '{"password":"bad"}' "$V1/public/share/$SHARE_TOKEN")
 expect "$code" 401 "密码错误被拒绝"
+
+# 访客拉取分享页里的图片 → 应得到带水印的 PNG 副本（而不是原图）
+PUB_IMG_URL=$(json 'd.share.items[0].media.find(m=>m.kind==="image")?.rawUrl' < "$WORK/body" 2>/dev/null || true)
+PUB_IMG_URL=${PUB_IMG_URL/\/api\/v1\/families\/$FID\/media/\/api\/v1\/public\/share\/$SHARE_TOKEN\/media}
+code=$(curl -sS -o "$WORK/wm-copy.png" -w '%{http_code}' -b "$JAR_V" -c "$JAR_V" "$PUB_IMG_URL")
+expect "$code" 200 "访客下载图片成功"
+file "$WORK/wm-copy.png" 2>/dev/null | grep -qi "PNG image" && ok "外发图片是重新编码的 PNG 水印副本" || bad "外发图片不是 PNG"
+node scripts/watermark-verify.mjs "$WORK/wm-copy.png" > "$WORK/wm-verify.json" 2>/dev/null
+WM_CODE=$(json '.wmCode' < "$WORK/wm-verify.json")
+WM_AUTH=$(json '.authentic' < "$WORK/wm-verify.json")
+[ -n "$WM_CODE" ] && [ "$WM_AUTH" = "true" ] && ok "从外发副本提取到可防伪验证的盲水印：$WM_CODE" || bad "外发副本提取不到有效盲水印"
+
+# 再下载一次（同访客应命中同一份副本）
+curl -sS -o /dev/null -b "$JAR_V" -c "$JAR_V" "$PUB_IMG_URL"
+# 管理端溯源总览
+code=$(req GET "$V1/families/$FID/share-links/$LINK_ID/overview" "$JAR_A" "" "$TOKEN_A")
+expect "$code" 200 "读取分享溯源总览"
+OV_RECIPIENTS=$(json 'd.overview.recipients' < "$WORK/body")
+OV_COPIES=$(json 'd.overview.watermarkedCopies' < "$WORK/body")
+OV_EVENTS=$(json 'd.overview.events' < "$WORK/body")
+[ "$OV_RECIPIENTS" = "1" ] && ok "识别出 1 个访客" || bad "访客数异常：$OV_RECIPIENTS"
+[ "$OV_COPIES" = "1" ] && ok "同一访客的重复下载复用同一份水印副本（共 1 份）" || bad "水印副本数异常：$OV_COPIES"
+[ "$OV_EVENTS" -ge 3 ] && ok "访问留痕完整（页面+图片查看，$OV_EVENTS 条）" || bad "访问事件过少：$OV_EVENTS"
+
+# 事件里应能看到该水印码
+code=$(req GET "$V1/families/$FID/share-links/$LINK_ID/events?limit=50" "$JAR_A" "" "$TOKEN_A")
+grep -q "$WM_CODE" "$WORK/body" && ok "访问事件与具体水印副本（$WM_CODE）关联" || bad "事件中找不到水印码"
+
+# 按水印码反查出处
+code=$(req POST "$V1/families/$FID/share-links/$LINK_ID/verify" "$JAR_A" "{\"wmCode\":\"$WM_CODE\"}" "$TOKEN_A")
+expect "$code" 200 "按水印码验证出处"
+HIT_RECIPIENT=$(json 'd.trace.recipient.id' < "$WORK/body")
+HIT_VIEWS=$(json 'd.trace.watermark.viewCount' < "$WORK/body")
+[ -n "$HIT_RECIPIENT" ] && ok "水印码反查到具体分发访客" || bad "水印码未命中任何副本"
+[ "$HIT_VIEWS" -ge 2 ] && ok "反查结果含该副本的访问次数（$HIT_VIEWS）" || bad "副本访问次数异常：$HIT_VIEWS"
+
+# 上传副本图片反查（盲水印通道）
+code=$(curl -sS -o "$WORK/body" -w '%{http_code}' -b "$JAR_A" -c "$JAR_A" -H "Authorization: Bearer $TOKEN_A" \
+  -F "file=@$WORK/wm-copy.png" "$V1/families/$FID/share-links/$LINK_ID/verify-image")
+expect "$code" 200 "上传外传图片反查出处"
+IMG_HIT=$(json 'd.trace.wmCode' < "$WORK/body"); IMG_SRC=$(json 'd.trace.source' < "$WORK/body")
+[ "$IMG_HIT" = "$WM_CODE" ] && ok "上传图片经盲水印（$IMG_SRC）命中同一副本" || bad "图片反查未命中：$IMG_HIT"
+
+# 伪造的水印码应被防伪校验拒绝
+code=$(req POST "$V1/families/$FID/share-links/$LINK_ID/verify" "$JAR_A" '{"wmCode":"HELLOWORLD000"}' "$TOKEN_A")
+FAKE_VALID=$(json 'd.trace.valid' < "$WORK/body"); FAKE_WM=$(json 'd.trace.watermark' < "$WORK/body")
+[ "$FAKE_VALID" = "false" ] && [ "$FAKE_WM" = "null" ] && ok "手编的假水印码无法通过防伪校验" || bad "假水印码被误判为真"
+
+# 撤销分享：已分发副本仍可追溯，且链接立刻失效
+code=$(req DELETE "$V1/families/$FID/share-links/$LINK_ID" "$JAR_A" "" "$TOKEN_A")
+expect "$code" 204 "撤销分享链接"
+code=$(curl -sS -o /dev/null -w '%{http_code}' -X POST -b "$JAR_V" -c "$JAR_V" -H 'Content-Type: application/json' --data '{"password":"zhangjia"}' "$V1/public/share/$SHARE_TOKEN")
+expect "$code" 404 "撤销后访客立即无法访问"
+code=$(req GET "$V1/families/$FID/share-links/$LINK_ID/overview" "$JAR_A" "" "$TOKEN_A")
+TRACE_STATUS=$(json 'd.overview.status' < "$WORK/body")
+COPY_AFTER=$(json 'd.overview.watermarkedCopies' < "$WORK/body")
+[ "$TRACE_STATUS" = "revoked" ] && ok "撤销后溯源记录保留" || bad "撤销状态异常：$TRACE_STATUS"
+[ "$COPY_AFTER" = "1" ] && ok "撤销后已分发副本仍可追溯（记录不删除）" || bad "撤销后副本记录丢失：$COPY_AFTER"
+
 
 # ---------- 10. 导出 / 审计 / 回收站 ----------
 step "10/10 导出、审计与回收站"

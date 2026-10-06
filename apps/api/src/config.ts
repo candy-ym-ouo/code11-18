@@ -54,6 +54,10 @@ const envSchema = z.object({
   WORKER_POLL_MS: z.coerce.number().int().min(200).default(2000),
   TRASH_RETENTION_DAYS: z.coerce.number().int().min(1).default(30),
   EXPORT_RETENTION_DAYS: z.coerce.number().int().min(1).default(7),
+  /** 分享撤销/过期后，水印副本文件保留多少天供溯源（数据库记录永久保留） */
+  WATERMARK_RETENTION_DAYS: z.coerce.number().int().min(1).default(180),
+  /** 对外访客标识 Cookie（hl_share_v）的有效期，覆盖最长的分享有效期并留余量 */
+  SHARE_VISITOR_TTL_DAYS: z.coerce.number().int().min(1).default(120),
 
   PUBLIC_SIGNUP: boolish(false),
   SERVE_WEB: boolish(true),

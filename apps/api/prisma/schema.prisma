@@ -98,6 +98,7 @@ enum JobType {
   export_build
   trash_purge
   storage_gc
+  watermark_cleanup
 }
 
 enum JobStatus {
@@ -139,13 +140,16 @@ model Family {
   updatedAt            DateTime   @updatedAt @map("updated_at")
   deletedAt            DateTime?  @map("deleted_at")
 
-  members    FamilyMember[]
-  invites    Invite[]
-  people     Person[]
-  items      Item[]
-  shareLinks ShareLink[]
-  auditLogs  AuditLog[]
-  settings   Setting[]
+  members     FamilyMember[]
+  invites     Invite[]
+  people      Person[]
+  items       Item[]
+  shareLinks  ShareLink[]
+  auditLogs   AuditLog[]
+  settings    Setting[]
+  watermarks  ShareWatermark[]
+  recipients  ShareRecipient[]
+  shareEvents ShareAccessEvent[]
 
   @@map("families")
 }
@@ -346,20 +350,24 @@ model ItemVersion {
 }
 
 model ShareLink {
-  id           String    @id @default(cuid())
-  familyId     String    @map("family_id")
-  tokenHash    String    @unique @map("token_hash")
-  passwordHash String?   @map("password_hash")
-  label        String?
-  expiresAt    DateTime  @map("expires_at")
-  revokedAt    DateTime? @map("revoked_at")
-  accessCount  Int       @default(0) @map("access_count")
-  lastAccessAt DateTime? @map("last_access_at")
-  createdBy    String    @map("created_by")
-  createdAt    DateTime  @default(now()) @map("created_at")
+  id             String    @id @default(cuid())
+  familyId       String    @map("family_id")
+  tokenHash      String    @unique @map("token_hash")
+  passwordHash   String?   @map("password_hash")
+  label          String?
+  watermarkMode  String    @default("visible+lsb") @map("watermark_mode")
+  expiresAt      DateTime  @map("expires_at")
+  revokedAt      DateTime? @map("revoked_at")
+  accessCount    Int       @default(0) @map("access_count")
+  lastAccessAt   DateTime? @map("last_access_at")
+  createdBy      String    @map("created_by")
+  createdAt      DateTime  @default(now()) @map("created_at")
 
-  family Family          @relation(fields: [familyId], references: [id], onDelete: Cascade)
-  items  ShareLinkItem[]
+  family     Family              @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  items      ShareLinkItem[]
+  recipients ShareRecipient[]
+  watermarks ShareWatermark[]
+  events     ShareAccessEvent[]
 
   @@index([familyId, createdAt])
   @@map("share_links")
@@ -374,6 +382,89 @@ model ShareLinkItem {
 
   @@id([shareLinkId, itemId])
   @@map("share_link_items")
+}
+
+/// 一个对外访客（浏览器）对应一条接收者记录；hl_share_v 签名 Cookie 是它的凭证。
+/// 即使链接被撤销，记录保留——水印副本与访问事件都挂在它身上，撤销后仍能追溯。
+model ShareRecipient {
+  id          String    @id @default(cuid())
+  shareLinkId String    @map("share_link_id")
+  familyId    String    @map("family_id")
+  cookieHash  String    @unique @map("cookie_hash")
+  label       String?
+  firstIp     String?   @map("first_ip")
+  lastIp      String?   @map("last_ip")
+  firstUserAgent  String? @map("first_user_agent")
+  lastUserAgent   String? @map("last_user_agent")
+  firstSeenAt DateTime  @default(now()) @map("first_seen_at")
+  lastSeenAt  DateTime  @default(now()) @map("last_seen_at")
+  blockedAt   DateTime? @map("blocked_at")
+
+  shareLink  ShareLink           @relation(fields: [shareLinkId], references: [id], onDelete: Cascade)
+  family     Family              @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  watermarks ShareWatermark[]
+  events     ShareAccessEvent[]
+
+  @@index([shareLinkId, firstSeenAt])
+  @@index([familyId])
+  @@map("share_recipients")
+}
+
+/// 每个「访客 × 图片」一份带水印的派生产物：可见水印 + LSB 盲水印（wmCode）。
+model ShareWatermark {
+  id          String   @id @default(cuid())
+  shareLinkId String   @map("share_link_id")
+  recipientId String   @map("recipient_id")
+  familyId    String   @map("family_id")
+  mediaId     String   @map("media_id")
+  /// 对外水印码（HMAC 短码），既画在可见水印上，也隐写进像素，凭它可验证出处
+  wmCode      String   @unique @map("wm_code")
+  storageKey  String   @map("storage_key")
+  sha256      String
+  byteSize    BigInt   @map("byte_size")
+  width       Int
+  height      Int
+  viewCount   Int      @default(0) @map("view_count")
+  downloadCount Int    @default(0) @map("download_count")
+  lastAccessAt DateTime? @map("last_access_at")
+  /// 链接失效/撤销超过保留期后删除文件本体，但保留本行（水印码 → 访客的映射仍是溯源证据）
+  filePurgedAt DateTime? @map("file_purged_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  shareLink ShareLink      @relation(fields: [shareLinkId], references: [id], onDelete: Cascade)
+  recipient ShareRecipient @relation(fields: [recipientId], references: [id], onDelete: Cascade)
+  family    Family         @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  events    ShareAccessEvent[]
+
+  @@unique([recipientId, mediaId])
+  @@index([shareLinkId])
+  @@index([familyId])
+  @@map("share_watermarks")
+}
+
+/// 对外访问留痕：页面查看、图片查看、图片下载逐条记录；撤销链接后仍然可查。
+model ShareAccessEvent {
+  id            String   @id @default(cuid())
+  shareLinkId   String   @map("share_link_id")
+  familyId      String   @map("family_id")
+  recipientId   String?  @map("recipient_id")
+  watermarkId   String?  @map("watermark_id")
+  mediaId       String?  @map("media_id")
+  kind          String
+  ip            String?
+  userAgent     String?  @map("user_agent")
+  byteSize      BigInt?  @map("byte_size")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  shareLink ShareLink       @relation(fields: [shareLinkId], references: [id], onDelete: Cascade)
+  family    Family          @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  recipient ShareRecipient? @relation(fields: [recipientId], references: [id], onDelete: SetNull)
+  watermark ShareWatermark? @relation(fields: [watermarkId], references: [id], onDelete: SetNull)
+
+  @@index([shareLinkId, createdAt])
+  @@index([familyId, createdAt])
+  @@index([recipientId, createdAt])
+  @@map("share_access_events")
 }
 
 model AuditLog {

@@ -190,20 +190,31 @@ export function SettingsPage() {
                 <div key={link.id} className="log-item">
                   <div className="log-item__body">
                     <div className="row" style={{ gap: 'var(--space-2)' }}>
-                      <span>{link.label || '未命名分享'}</span>
+                      <Link to={`/f/${fid}/share-links/${link.id}/trace`} style={{ fontWeight: 600 }}>
+                        {link.label || '未命名分享'}
+                      </Link>
                       {link.hasPassword ? <Tag>有密码</Tag> : null}
+                      <Tag tone="muted">
+                        {link.watermarkMode === 'off' ? '无水印' : link.watermarkMode === 'lsb' ? '盲水印' : '明+盲水印'}
+                      </Tag>
                       {active ? <Tag tone="success">有效</Tag> : <Tag tone="muted">{link.revokedAt ? '已撤销' : '已过期'}</Tag>}
                     </div>
                     <div className="log-item__meta">
-                      访问 {link.accessCount} 次 · 有效期至 {formatDateTime(link.expiresAt)}
+                      访问 {link.accessCount} 次 · 访客 {link.recipientCount ?? 0} · 水印副本 {link.watermarkedCopyCount ?? 0} · 有效期至{' '}
+                      {formatDateTime(link.expiresAt)}
                       {link.lastAccessAt ? ` · 最近 ${formatDateTime(link.lastAccessAt)}` : ''}
                     </div>
                   </div>
-                  {active ? (
-                    <Button size="sm" onClick={() => revoke.mutate(link.id)}>
-                      撤销
-                    </Button>
-                  ) : null}
+                  <div className="row" style={{ gap: 'var(--space-2)' }}>
+                    <Link className="btn btn--sm" to={`/f/${fid}/share-links/${link.id}/trace`}>
+                      溯源
+                    </Link>
+                    {active ? (
+                      <Button size="sm" onClick={() => revoke.mutate(link.id)}>
+                        撤销
+                      </Button>
+                    ) : null}
+                  </div>
                 </div>
               );
             })}

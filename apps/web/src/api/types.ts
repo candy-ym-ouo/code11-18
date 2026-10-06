@@ -153,9 +153,12 @@ export interface TimelineGroup {
   items: Item[];
 }
 
+export type WatermarkMode = 'visible+lsb' | 'lsb' | 'off';
+
 export interface ShareLink {
   id: string;
   label: string | null;
+  watermarkMode: WatermarkMode;
   expiresAt: string;
   revokedAt: string | null;
   accessCount: number;
@@ -164,6 +167,74 @@ export interface ShareLink {
   createdAt: string;
   url: string | null;
   token?: string;
+  recipientCount?: number;
+  watermarkedCopyCount?: number;
+}
+
+export interface ShareTraceOverview {
+  linkId: string;
+  label: string | null;
+  watermarkMode: WatermarkMode;
+  status: 'active' | 'revoked' | 'expired';
+  expiresAt: string;
+  revokedAt: string | null;
+  recipients: number;
+  watermarkedCopies: number;
+  trackedImages: number;
+  events: number;
+  downloads: number;
+}
+
+export interface ShareRecipient {
+  id: string;
+  label: string | null;
+  blocked: boolean;
+  firstIp: string | null;
+  lastIp: string | null;
+  firstUserAgent: string | null;
+  lastUserAgent: string | null;
+  firstSeenAt: string;
+  lastSeenAt: string;
+  watermarkCount: number;
+  eventCount: number;
+}
+
+export interface ShareTraceEvent {
+  id: string;
+  kind: 'page_view' | 'image_view' | 'image_download' | 'media_download' | 'denied';
+  recipientId: string | null;
+  mediaId: string | null;
+  wmCode: string | null;
+  ip: string | null;
+  userAgent: string | null;
+  byteSize: number | null;
+  createdAt: string;
+}
+
+export interface TraceHit {
+  valid: boolean;
+  wmCode: string | null;
+  source: 'code' | 'lsb' | 'png-text';
+  watermark: {
+    id: string;
+    linkId: string;
+    mediaId: string;
+    recipientId: string;
+    createdAt: string;
+    viewCount: number;
+    downloadCount: number;
+    lastAccessAt: string | null;
+    sha256: string;
+  } | null;
+  link: { id: string; label: string | null; revokedAt: string | null; expiresAt: string } | null;
+  recipient: {
+    id: string;
+    label: string | null;
+    firstIp: string | null;
+    lastIp: string | null;
+    firstSeenAt: string;
+  } | null;
+  events: { kind: string; ip: string | null; createdAt: string; byteSize: number | null }[];
 }
 
 export interface AuditLog {

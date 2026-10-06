@@ -9,6 +9,7 @@ import { inspectDocument } from '../media/document';
 import { putBuffer, remove } from '../storage/local';
 import { makeTmpPath } from '../services/mediaService';
 import { buildExportZip } from '../services/exportService';
+import { purgeStaleWatermarks } from '../services/provenanceService';
 
 type Handler = (job: Job) => Promise<Record<string, unknown>>;
 
@@ -116,6 +117,12 @@ async function handleStorageGc(): Promise<Record<string, unknown>> {
   for (const m of media) {
     for (const k of [m.storageKey, m.thumbKey, m.largeKey, m.transcodeKey, m.waveformKey]) if (k) referenced.add(k);
   }
+  // 对外水印副本：只要文件未标记清理就仍受引用保护，绝不能被孤儿回收误删
+  const watermarks = await prisma.shareWatermark.findMany({
+    where: { filePurgedAt: null },
+    select: { storageKey: true },
+  });
+  for (const wm of watermarks) referenced.add(wm.storageKey);
 
   const root = config.STORAGE_ROOT;
   let scanned = 0;
@@ -175,12 +182,19 @@ async function handleStorageGc(): Promise<Record<string, unknown>> {
   return { scanned, deleted };
 }
 
+/** 撤销/过期链接的水印副本文件到期清理（数据库记录保留，溯源链不断）。 */
+async function handleWatermarkCleanup(): Promise<Record<string, unknown>> {
+  const result = await purgeStaleWatermarks();
+  return result;
+}
+
 const HANDLERS: Record<string, Handler> = {
   media_thumbnail: handleThumbnail,
   media_waveform: handleWaveform,
   export_build: handleExport,
   trash_purge: handleTrashPurge,
   storage_gc: handleStorageGc,
+  watermark_cleanup: handleWatermarkCleanup,
 };
 
 /** 原子领取一个任务：UPDATE ... WHERE id IN (SELECT ... FOR UPDATE SKIP LOCKED)。 */
@@ -264,6 +278,7 @@ export function startWorker(): () => void {
     void prisma.job
       .create({ data: { type: 'trash_purge', payload: {} as never } })
       .then(() => prisma.job.create({ data: { type: 'storage_gc', payload: {} as never } }))
+      .then(() => prisma.job.create({ data: { type: 'watermark_cleanup', payload: {} as never } }))
       .catch((err) => logger.error({ err }, '每日维护任务入队失败'));
   }, DAILY);
 

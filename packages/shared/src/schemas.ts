@@ -126,11 +126,28 @@ export const rejectNoteSchema = z.object({
   reason: trimmed(200),
 });
 
+export const WATERMARK_MODES = ['visible+lsb', 'lsb', 'off'] as const;
+
 export const createShareLinkSchema = z.object({
   itemIds: z.array(z.string().cuid()).min(1).max(200),
   expiresInDays: z.number().int().min(1).max(90).default(7),
   password: z.string().min(4).max(64).optional().nullable(),
   label: optionalText(60),
+  watermarkMode: z.enum(WATERMARK_MODES).default('visible+lsb'),
+});
+
+export const recipientLabelSchema = z.object({
+  label: z.string().trim().max(60).nullable(),
+  blocked: z.boolean().optional(),
+});
+
+export const verifyWatermarkSchema = z.object({
+  /** 从泄露图片上读到/解码出的水印码（可见水印上的短码或盲水印提取结果） */
+  wmCode: z
+    .string()
+    .trim()
+    .regex(/^[A-Z0-9]{8,16}$|^[0-9a-f]{16,64}$/, '水印码格式不正确')
+    .optional(),
 });
 
 export const listItemsQuerySchema = z.object({

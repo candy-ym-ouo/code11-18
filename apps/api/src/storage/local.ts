@@ -41,6 +41,11 @@ export function derivedKey(familyId: string, sha256: string, suffix: string): st
   return path.posix.join('families', familyId, 'derived', sha256.slice(0, 2), `${sha256}${suffix}`);
 }
 
+/** 对外分享的逐访客水印副本：families/<fid>/watermarks/<wmCode>.png */
+export function watermarkKey(familyId: string, wmCode: string): string {
+  return path.posix.join('families', familyId, 'watermarks', `${wmCode}.png`);
+}
+
 export function absOf(key: string): string {
   const target = path.join(config.STORAGE_ROOT, key);
   const root = path.resolve(config.STORAGE_ROOT);

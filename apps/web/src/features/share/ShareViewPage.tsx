@@ -6,14 +6,30 @@ import { Button, EmptyState, Field, Spinner, Tag, TextInput } from '../../compon
 import { ImageGallery } from '../media/ImageGallery';
 import { AudioPlayer } from '../media/AudioPlayer';
 import { CATEGORY_ICONS, CATEGORY_LABELS } from '../../lib/constants';
-import type { Item } from '../../api/types';
+import type { Item, Media } from '../../api/types';
 
 interface ShareView {
   familyName: string;
   label: string | null;
   expiresAt: string;
   requiresPassword: boolean;
+  watermarkMode: 'visible+lsb' | 'lsb' | 'off';
   items: Item[];
+}
+
+/**
+ * 公开页的媒体 DTO 里的地址是家庭内部接口，访客没有登录态，必须重写成
+ * /public/share/<token>/media/... 走鉴权（图片会下发带水印的逐访客副本）。
+ */
+function publicMedia(token: string, m: Media): Media {
+  const rewrite = (url: string | null): string | null =>
+    url ? url.replace(/^\/api\/v1\/families\/[^/]+\/media\//, `/api/v1/public/share/${token}/media/`) : null;
+  return {
+    ...m,
+    rawUrl: rewrite(m.rawUrl) ?? `/api/v1/public/share/${token}/media/${m.id}/raw`,
+    thumbUrl: rewrite(m.thumbUrl),
+    waveformUrl: rewrite(m.waveformUrl),
+  };
 }
 
 export function ShareViewPage() {
@@ -118,33 +134,44 @@ export function ShareViewPage() {
           </div>
         </div>
 
+        {view.watermarkMode !== 'off' ? (
+          <p className="muted" style={{ fontSize: 13, marginTop: 0 }}>
+            本页图片由「{view.familyName}」通过家庭档案系统分发，已自动添加
+            {view.watermarkMode === 'visible+lsb' ? '可见出处水印与隐藏验证标记' : '隐藏出处验证标记'}
+            ；访问与下载会被记录，请勿擅自二次转发。
+          </p>
+        ) : null}
+
         {view.items.length === 0 ? (
           <EmptyState title="没有可查看的内容" description="可能分享已经被撤销或内容已删除。" />
         ) : (
           <div className="stack">
-            {view.items.map((item) => (
-              <article key={item.id} className="card">
-                <div className="row" style={{ gap: 'var(--space-2)', marginBottom: 6 }}>
-                  <Tag>
-                    {CATEGORY_ICONS[item.category]} {CATEGORY_LABELS[item.category]}
-                  </Tag>
-                  <Tag tone="muted">{item.acquiredDisplay}</Tag>
-                </div>
-                <h2 style={{ marginBottom: 'var(--space-2)' }}>{item.title}</h2>
-                {item.placeText ? <p className="muted">{item.placeText}</p> : null}
-                {item.storyHtml ? (
-                  <div className="story" dangerouslySetInnerHTML={{ __html: item.storyHtml }} />
-                ) : null}
-                <ImageGallery media={item.media.filter((m) => m.kind === 'image')} />
-                {item.media
-                  .filter((m) => m.kind === 'audio')
-                  .map((m) => (
-                    <div key={m.id} style={{ marginTop: 'var(--space-3)' }}>
-                      <AudioPlayer media={{ ...m, rawUrl: `/api/v1/public/share/${token}/media/${m.id}/download` }} />
-                    </div>
-                  ))}
-              </article>
-            ))}
+            {view.items.map((item) => {
+              const publicItem = { ...item, media: item.media.map((m) => publicMedia(token!, m)) };
+              return (
+                <article key={item.id} className="card">
+                  <div className="row" style={{ gap: 'var(--space-2)', marginBottom: 6 }}>
+                    <Tag>
+                      {CATEGORY_ICONS[item.category]} {CATEGORY_LABELS[item.category]}
+                    </Tag>
+                    <Tag tone="muted">{item.acquiredDisplay}</Tag>
+                  </div>
+                  <h2 style={{ marginBottom: 'var(--space-2)' }}>{item.title}</h2>
+                  {item.placeText ? <p className="muted">{item.placeText}</p> : null}
+                  {item.storyHtml ? (
+                    <div className="story" dangerouslySetInnerHTML={{ __html: item.storyHtml }} />
+                  ) : null}
+                  <ImageGallery media={publicItem.media.filter((m) => m.kind === 'image')} />
+                  {publicItem.media
+                    .filter((m) => m.kind === 'audio')
+                    .map((m) => (
+                      <div key={m.id} style={{ marginTop: 'var(--space-3)' }}>
+                        <AudioPlayer media={{ ...m, rawUrl: `/api/v1/public/share/${token}/media/${m.id}/download` }} />
+                      </div>
+                    ))}
+                </article>
+              );
+            })}
           </div>
         )}
       </main>

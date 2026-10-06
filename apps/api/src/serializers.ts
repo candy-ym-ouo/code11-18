@@ -153,6 +153,7 @@ export function toShareLinkDto(s: ShareLink, token?: string) {
   return {
     id: s.id,
     label: s.label,
+    watermarkMode: s.watermarkMode,
     expiresAt: s.expiresAt.toISOString(),
     revokedAt: s.revokedAt?.toISOString() ?? null,
     accessCount: s.accessCount,

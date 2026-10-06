@@ -23,6 +23,7 @@ export const ACTIONS = [
   'note:deleteAny',
   'audit:read',
   'share:manage',
+  'share:trace',
 ] as const;
 export type Action = (typeof ACTIONS)[number];
 
@@ -53,6 +54,8 @@ const M: Record<Action, readonly FamilyRole[]> = {
   'note:deleteAny': ['owner', 'admin'],
   'audit:read': ['owner', 'admin'],
   'share:manage': ['owner', 'admin', 'editor'],
+  // 溯源信息（访客身份/IP/访问明细/水印验证）比分享管理更敏感：只给 owner/admin
+  'share:trace': ['owner', 'admin'],
 };
 
 export function roleCan(role: FamilyRole, action: Action): boolean {

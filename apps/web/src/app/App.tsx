@@ -18,6 +18,7 @@ import { AuditPage } from '../features/audit/AuditPage';
 import { SettingsPage } from '../features/settings/SettingsPage';
 import { TrashPage } from '../features/items/TrashPage';
 import { ShareViewPage } from '../features/share/ShareViewPage';
+import { ShareTracePage } from '../features/share/ShareTracePage';
 
 function NotFoundPage() {
   return (
@@ -98,6 +99,14 @@ export function App() {
           element={
             <RequireFamily roles={['owner', 'admin']}>
               <SettingsPage />
+            </RequireFamily>
+          }
+        />
+        <Route
+          path="share-links/:linkId/trace"
+          element={
+            <RequireFamily roles={['owner', 'admin']}>
+              <ShareTracePage />
             </RequireFamily>
           }
         />
